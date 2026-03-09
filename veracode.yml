@@ -1,4 +1,4 @@
 veracode_static_scan:
   create_issue: true
-  use_custom_workflow: register-build
-  artifact_file: dotnet-build
+  # use_custom_workflow: register-build
+  # artifact_file: dotnet-build
