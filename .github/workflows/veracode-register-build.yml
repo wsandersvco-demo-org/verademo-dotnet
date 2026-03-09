@@ -24,7 +24,7 @@ jobs:
           cache: true
 
       - name: Build with .NET
-        run: dotnet publish app -c Debug -o ./publish -p:UseAppHost=false
+        run: dotnet publish app -c Debug -o ./publish -p:UseAppHost=false -p:RestorePackagesWithLockFile=True
 
       - run: |
           Compress-Archive -Path publish/ -DestinationPath publish.zip
