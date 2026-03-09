@@ -10,7 +10,8 @@ app/.vscode/tasks.json
 .vscode/*
 
 # ignore things like results.json from a pipeline scan
-app/*.json  
+app/*.json
+!app/packages.lock.json
 /publish
 /publish.zip
 .vs
