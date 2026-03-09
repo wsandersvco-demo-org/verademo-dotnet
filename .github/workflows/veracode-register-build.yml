@@ -1,0 +1,61 @@
+name: Build with .NET
+
+on:
+  workflow_dispatch:
+  repository_dispatch:
+    types: [register-build]
+
+env:
+  ARTIFACT_NAME: dotnet-build
+  ARTIFACT_PATH: publish.zip
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "6.0.x"
+          cache: true
+
+      - name: Build with .NET
+        run: dotnet publish app -o ./publish
+
+      - run: |
+          Compress-Archive -Path publish/ -DestinationPath publish.zip
+
+      - name: Upload build artifacts
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: ${{ env.ARTIFACT_PATH }}
+          retention-days: 3
+
+  register:
+    runs-on: ${{ fromJSON(github.event.client_payload.user_config.default_runs_on) }}
+    name: register
+    if: github.event_name == 'repository_dispatch' && github.event.action == 'register-build'
+    needs: build
+    steps:
+      - name: Register build
+        id: register-build
+        uses: veracode/github-actions-integration-helper@v0.1.9
+        with:
+          action: registerBuild
+          vid: ${{ secrets.VERACODE_API_ID }}
+          vkey: ${{ secrets.VERACODE_API_KEY }}
+          token: ${{ github.event.client_payload.token }}
+          appname: ${{ github.event.client_payload.user_config.profile_name }}
+          source_repository: ${{ github.event.client_payload.repository.full_name }}
+          check_run_id: ${{ github.run_id }}
+          check_run_name: ${{ github.workflow }}
+          head_sha: ${{ github.event.client_payload.sha }}
+          event_type: ${{ github.event.client_payload.event_type }}
+          branch: ${{ github.event.client_payload.user_config.sandbox_scan.branch }}
+          issue_trigger_flow: ${{ github.event.client_payload.user_config.issue_trigger_flow }}
