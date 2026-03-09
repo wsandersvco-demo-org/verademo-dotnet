@@ -1,0 +1,3 @@
+veracode_static_scan:
+  use_custom_workflow: register-build
+  artifact_file: dotnet-build
