@@ -1,4 +1,12 @@
 veracode_static_scan:
+  push:
+    trigger: true
+    # Please only specify either branches_to_run or branches_to_exclude
+    # Entering both will only execute branches_to_run
+    # Leaving them both blank means this will never run
+    branches_to_run:
+      - '*'
+    branches_to_exclude:
   create_issue: true
   # use_custom_workflow: register-build
   # artifact_file: dotnet-build
