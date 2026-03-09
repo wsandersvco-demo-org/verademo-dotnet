@@ -22,6 +22,7 @@ jobs:
         with:
           dotnet-version: "6.0.x"
           cache: true
+          cache-dependency-path: app/packages.lock.json
 
       - name: Build with .NET
         run: dotnet publish app -c Debug -o ./publish -p:UseAppHost=false -p:RestorePackagesWithLockFile=True
