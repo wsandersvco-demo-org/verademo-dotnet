@@ -222,9 +222,25 @@ object VeracodePipelineScanSca : BuildType({
             id = "Veracode_SCA_Scan"
             scriptMode = script {
                 content = """
-                    #Invoke-Command -ScriptBlock ([scriptblock]::Create([System.Text.Encoding]::UTF8.GetString((New-Object Net.WebClient).DownloadData('https://sca-downloads.veracode.com/ci.ps1')))) -ArgumentList @('--recursive', '--allow-dirty', '--appname', '"%env.TEAMCITY_PROJECT_NAME%"')
                     New-Item -Path 'veracode-results' -Type Directory -Force
-                    Invoke-Command -ScriptBlock ([scriptblock]::Create([System.Text.Encoding]::UTF8.GetString((New-Object Net.WebClient).DownloadData('https://sca-downloads.veracode.com/ci.ps1')))) -ArgumentList @('scan', '--recursive', '--allow-dirty', '--json', 'veracode-results\scaResults.json')
+
+                    # Try SCA scan with app profile first
+                    Write-Host "Attempting SCA scan with app profile creation..."
+                    Invoke-Command -ScriptBlock ([scriptblock]::Create([System.Text.Encoding]::UTF8.GetString((New-Object Net.WebClient).DownloadData('https://sca-downloads.veracode.com/ci.ps1')))) -ArgumentList @('scan', '--recursive', '--allow-dirty', '--appname', "%env.TEAMCITY_PROJECT_NAME%", '--json', 'veracode-results\scaResults.json')
+
+                    if (${'$'}LASTEXITCODE -ne 0) {
+                        Write-Host "SCA scan with app profile failed (exit code: ${'$'}LASTEXITCODE). Retrying without app profile..."
+                        Invoke-Command -ScriptBlock ([scriptblock]::Create([System.Text.Encoding]::UTF8.GetString((New-Object Net.WebClient).DownloadData('https://sca-downloads.veracode.com/ci.ps1')))) -ArgumentList @('scan', '--recursive', '--allow-dirty', '--json', 'veracode-results\scaResults.json')
+
+                        if (${'$'}LASTEXITCODE -eq 0) {
+                            Write-Host "Retry without app profile succeeded"
+                        } else {
+                            Write-Host "Retry failed with exit code: ${'$'}LASTEXITCODE"
+                            exit 1
+                        }
+                    } else {
+                        Write-Host "SCA scan with app profile completed successfully"
+                    }
                 """.trimIndent()
             }
         }
