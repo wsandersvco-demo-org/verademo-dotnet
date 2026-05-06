@@ -172,7 +172,6 @@ object VeracodePipelineScanSca : BuildType({
         powerShell {
             name = "Veracode Static Scan"
             id = "Veracode_Static_Scan"
-            enabled = false
             scriptMode = script {
                 content = """
                     ${'$'}files = (Get-ChildItem -Depth 1 -Path ./veracode-artifacts/ -File)
