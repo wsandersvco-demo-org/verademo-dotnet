@@ -1,6 +1,7 @@
 package patches.buildTypes
 
 import jetbrains.buildServer.configs.kotlin.*
+import jetbrains.buildServer.configs.kotlin.BuildStep
 import jetbrains.buildServer.configs.kotlin.buildSteps.PowerShellStep
 import jetbrains.buildServer.configs.kotlin.buildSteps.powerShell
 import jetbrains.buildServer.configs.kotlin.ui.*
@@ -229,5 +230,14 @@ changeBuildType(RelativeId("VeracodePipelineScanSca")) {
             clearConditions()
             param("teamcity.kubernetes.executor.pull.policy", "")
         }
+        update<BuildStep>(6) {
+            executionMode = BuildStep.ExecutionMode.RUN_ON_FAILURE
+            clearConditions()
+            param("defaultScanName", "")
+            param("defaultAppName", "")
+        }
     }
+
+    expectDisabledSettings()
+    updateDisabledSettings("Veracode_Policy_Scan")
 }
