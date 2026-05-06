@@ -43,8 +43,7 @@ object VeracodePipelineScanSca : BuildType({
     params {
         param("VERACODE_POLICY_NAME", "Veracode Recommended Very High")
         param("VERACODE_CLI", "")
-        checkbox("env.DEBUG", "false",
-                  checked = "true", unchecked = "false")
+        param("env.DEBUG", "false")
     }
 
     vcs {
