@@ -229,13 +229,18 @@ object VeracodePipelineScanSca : BuildType({
                 content = """
                     New-Item -Path 'veracode-results' -Type Directory -Force
                     
-                    # Install srcclr agent using ci.ps1
-                    Write-Host "Installing srcclr agent..."
-                    Invoke-Command -ScriptBlock ([scriptblock]::Create([System.Text.Encoding]::UTF8.GetString((New-Object Net.WebClient).DownloadData('https://sca-downloads.veracode.com/ci.ps1')))) -ArgumentList @('install')
+                    # Locate the srcclr binary in the cache
+                    Write-Host "Locating srcclr binary in cache..."
+                    ${'$'}srcclrPaths = Get-ChildItem -Path "${'$'}{env:TEMP}\srcclr" -Recurse -Filter srcclr.exe -ErrorAction SilentlyContinue
+                    if (-not ${'$'}srcclrPaths) {
+                      # Install srcclr agent using ci.ps1
+                      Write-Host "Installing srcclr agent..."
+                      Invoke-Command -ScriptBlock ([scriptblock]::Create([System.Text.Encoding]::UTF8.GetString((New-Object Net.WebClient).DownloadData('https://sca-downloads.veracode.com/ci.ps1'))))
                     
-                    if (${'$'}LASTEXITCODE -ne 0) {
-                        Write-Host "Failed to install srcclr agent"
-                        exit 1
+                      if (${'$'}LASTEXITCODE -ne 0) {
+                          Write-Host "Failed to install srcclr agent"
+                          exit 1
+                      }
                     }
                     
                     # Locate the srcclr binary in the cache
