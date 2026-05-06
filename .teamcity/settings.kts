@@ -224,13 +224,32 @@ object VeracodePipelineScanSca : BuildType({
                 content = """
                     New-Item -Path 'veracode-results' -Type Directory -Force
 
+                    # Install srcclr agent using ci.ps1
+                    Write-Host "Installing srcclr agent..."
+                    Invoke-Command -ScriptBlock ([scriptblock]::Create([System.Text.Encoding]::UTF8.GetString((New-Object Net.WebClient).DownloadData('https://sca-downloads.veracode.com/ci.ps1')))) -ArgumentList @('install')
+
+                    if (${'$'}LASTEXITCODE -ne 0) {
+                        Write-Host "Failed to install srcclr agent"
+                        exit 1
+                    }
+
+                    # Locate the srcclr binary in the cache
+                    Write-Host "Locating srcclr binary in cache..."
+                    ${'$'}srcclrPaths = Get-ChildItem -Path "${'$'}{env:TEMP}\srcclr" -Recurse -Filter srcclr.exe -ErrorAction SilentlyContinue
+                    if (-not ${'$'}srcclrPaths) {
+                        Write-Host "ERROR: srcclr binary not found after installation"
+                        exit 1
+                    }
+                    ${'$'}srcclrExe = ${'$'}srcclrPaths[0].FullName
+                    Write-Host "Found srcclr at: ${'$'}srcclrExe"
+
                     # Try SCA scan with app profile first
                     Write-Host "Attempting SCA scan with app profile creation..."
-                    Invoke-Command -ScriptBlock ([scriptblock]::Create([System.Text.Encoding]::UTF8.GetString((New-Object Net.WebClient).DownloadData('https://sca-downloads.veracode.com/ci.ps1')))) -ArgumentList @('scan', '--recursive', '--allow-dirty', '--appname', "%env.TEAMCITY_PROJECT_NAME%", '--json', 'veracode-results\scaResults.json')
+                    & ${'$'}srcclrExe scan --recursive --allow-dirty --appname "%env.TEAMCITY_PROJECT_NAME%" --json veracode-results\scaResults.json
 
                     if (${'$'}LASTEXITCODE -ne 0) {
                         Write-Host "SCA scan with app profile failed (exit code: ${'$'}LASTEXITCODE). Retrying without app profile..."
-                        Invoke-Command -ScriptBlock ([scriptblock]::Create([System.Text.Encoding]::UTF8.GetString((New-Object Net.WebClient).DownloadData('https://sca-downloads.veracode.com/ci.ps1')))) -ArgumentList @('scan', '--recursive', '--allow-dirty', '--json', 'veracode-results\scaResults.json')
+                        & ${'$'}srcclrExe scan --recursive --allow-dirty --json veracode-results\scaResults.json
 
                         if (${'$'}LASTEXITCODE -eq 0) {
                             Write-Host "Retry without app profile succeeded"
