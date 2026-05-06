@@ -132,7 +132,6 @@ object VeracodePipelineScanSca : BuildType({
         powerShell {
             name = "Install Veracode CLI"
             id = "Install_Veracode_CLI"
-            enabled = false
             scriptMode = script {
                 content = """
                     ${'$'}cliFile = Get-ChildItem -Path "." -Filter *.ps1 | Select-Object -First 1
