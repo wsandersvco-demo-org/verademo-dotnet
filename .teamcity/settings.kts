@@ -149,6 +149,7 @@ object VeracodePipelineScanSca : BuildType({
         powerShell {
             name = "Veracode Package"
             id = "Veracode_Package"
+            enabled = false
             scriptMode = script {
                 content = """
                     ${'$'}working_path = (Get-Location).Path
