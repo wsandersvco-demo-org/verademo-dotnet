@@ -54,7 +54,6 @@ object VeracodePipelineScanSca : BuildType({
         powerShell {
             name = "Download Veracode CLI"
             id = "Veracode_CLI"
-            enabled = false
             scriptMode = script {
                 content = """
                     # Get the first file in the directory                   
