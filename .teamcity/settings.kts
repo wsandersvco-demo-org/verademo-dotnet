@@ -228,6 +228,22 @@ object VeracodePipelineScanSca : BuildType({
                 """.trimIndent()
             }
         }
+        step {
+            name = "Veracode Policy Scan"
+            id = "Veracode_Policy_Scan"
+            type = "teamcity-veracode-plugin"
+            param("deleteIncompleteScan", "1")
+            param("teams", "Default Team")
+            param("appName", "%env.TEAMCITY_PROJECT_NAME%")
+            param("criticality", "VeryHigh")
+            param("useGlobalCredentials", "true")
+            param("version", "%env.BUILD_NUMBER%")
+            param("uploadIncludePattern", "veracode-artifacts/**")
+            param("createProfile", "true")
+            param("waitForScan", "true")
+            param("createSandbox", "false")
+            param("scanTimeOut", "120")
+        }
     }
 
     triggers {
