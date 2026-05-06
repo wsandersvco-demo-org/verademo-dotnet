@@ -54,7 +54,7 @@ object VeracodePipelineScanSca : BuildType({
         powerShell {
             name = "Download Veracode CLI"
             id = "Veracode_CLI"
-            enabled = false
+            enabled = true
             scriptMode = script {
                 content = """
                     # Get the first file in the directory                   
@@ -133,7 +133,7 @@ object VeracodePipelineScanSca : BuildType({
         powerShell {
             name = "Install Veracode CLI"
             id = "Install_Veracode_CLI"
-            enabled = false
+            enabled = true
             scriptMode = script {
                 content = """
                     ${'$'}cliFile = Get-ChildItem -Path "." -Filter *.ps1 | Select-Object -First 1
@@ -149,7 +149,7 @@ object VeracodePipelineScanSca : BuildType({
         powerShell {
             name = "Veracode Package"
             id = "Veracode_Package"
-            enabled = false
+            enabled = true
             scriptMode = script {
                 content = """
                     ${'$'}working_path = (Get-Location).Path
@@ -172,7 +172,7 @@ object VeracodePipelineScanSca : BuildType({
         powerShell {
             name = "Veracode Static Scan"
             id = "Veracode_Static_Scan"
-            enabled = false
+            enabled = true
             scriptMode = script {
                 content = """
                     ${'$'}files = (Get-ChildItem -Depth 1 -Path ./veracode-artifacts/ -File)
