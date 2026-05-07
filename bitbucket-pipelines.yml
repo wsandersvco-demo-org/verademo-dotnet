@@ -1,0 +1,102 @@
+image: maven:3.9-eclipse-temurin-17
+
+definitions:
+  steps:
+    - step: &install-veracode-cli
+        name: Install Veracode CLI
+        script:
+          - set -e
+          - echo "Installing Veracode CLI..."
+          - curl -fsS -O https://tools.veracode.com/veracode-cli/install
+          - chmod +x ./install
+          - ./install
+          - ls -la
+          - chmod +x veracode || echo "veracode binary not found in current directory"
+          - ./veracode version || echo "Failed to run veracode"
+        artifacts:
+          - veracode
+   
+    - step: &autopackage
+        name: Autopackage Application
+        script:
+          - set -e
+          - echo "Running Veracode autopackager..."
+          - chmod +x veracode
+          - mkdir -p verascan
+          - ./veracode package --source . --output verascan --trust
+          - echo "Packaged artifacts:"
+          - ls -lhR verascan
+          - PACKAGED_FILE=$(find verascan -type f \( -name "*.war" -o -name "*.jar" -o -name "*.zip" \) | head -n1)
+          - echo "Main packaged file - $PACKAGED_FILE"
+          - echo "$PACKAGED_FILE" > packaged_file.txt
+        artifacts:
+          - verascan/**
+          - packaged_file.txt
+   
+    - step: &sca-scan
+        name: Agent-Based SCA
+        script:
+          - set -e
+          - echo "Running Veracode Agent-Based SCA..."
+          - curl -sSL https://download.sourceclear.com/ci.sh | sh -s -- scan app --recursive --allow-dirty
+   
+    - step: &policy-scan
+        name: Policy Scan (Production)
+        script:
+          - set -e
+          - echo "Installing prerequisites..."
+          - apt-get update && apt-get install -y unzip
+          - echo "Downloading Veracode Java API Wrapper..."
+          - mkdir -p .veracode
+          - VERSION=$(curl -s https://repo1.maven.org/maven2/com/veracode/vosp/api/wrappers/vosp-api-wrappers-java/maven-metadata.xml | grep -oPm1 "(?<=<latest>)[^<]+")
+          - curl -L "https://repo1.maven.org/maven2/com/veracode/vosp/api/wrappers/vosp-api-wrappers-java/${VERSION}/vosp-api-wrappers-java-${VERSION}-dist.zip" -o .veracode/dist.zip
+          - cd .veracode && unzip -o dist.zip && cd ..
+          - JAR_PATH=$(find .veracode -type f -name "VeracodeJavaAPI*.jar" | head -n1)
+          - cp "$JAR_PATH" vosp-api-wrapper-java.jar
+          - echo "Uploading to Veracode..."
+          - PACKAGED_FILE=$(cat packaged_file.txt)
+          - echo "Packaged file - $PACKAGED_FILE"
+          - java -jar vosp-api-wrapper-java.jar -vid $VERACODE_API_ID -vkey $VERACODE_API_KEY -action UploadAndScan -appname "Bitbucket_Verademo" -createprofile true -autoscan true -filepath $PACKAGED_FILE -version "Build $BITBUCKET_BUILD_NUMBER"
+   
+    - step: &sandbox-scan
+        name: Sandbox Scan (Release)
+        script:
+          - set -e
+          - echo "Installing prerequisites..."
+          - apt-get update && apt-get install -y unzip
+          - echo "Downloading Veracode Java API Wrapper..."
+          - mkdir -p .veracode
+          - VERSION=$(curl -s https://repo1.maven.org/maven2/com/veracode/vosp/api/wrappers/vosp-api-wrappers-java/maven-metadata.xml | grep -oPm1 "(?<=<latest>)[^<]+")
+          - curl -L "https://repo1.maven.org/maven2/com/veracode/vosp/api/wrappers/vosp-api-wrappers-java/${VERSION}/vosp-api-wrappers-java-${VERSION}-dist.zip" -o .veracode/dist.zip
+          - cd .veracode && unzip -o dist.zip && cd ..
+          - JAR_PATH=$(find .veracode -type f -name "VeracodeJavaAPI*.jar" | head -n1)
+          - cp "$JAR_PATH" vosp-api-wrapper-java.jar
+          - echo "Uploading to Veracode Sandbox..."
+          - PACKAGED_FILE=$(cat packaged_file.txt)
+          - echo "Packaged file - $PACKAGED_FILE"
+          - java -jar vosp-api-wrapper-java.jar -vid $VERACODE_API_ID -vkey $VERACODE_API_KEY -action UploadAndScan -appname "Bitbucket_Verademo" -createprofile true -autoscan true -sandboxname "bitbucket-release" -createsandbox true -filepath $PACKAGED_FILE -version "Release $BITBUCKET_BUILD_NUMBER"
+
+pipelines:
+  branches:
+    main:
+      - step: *install-veracode-cli
+      - step: *autopackage
+      - step: *sca-scan
+      - step: *policy-scan
+   
+    release/*:
+      - step: *install-veracode-cli
+      - step: *autopackage
+      - step: *sca-scan
+      - step: *sandbox-scan
+   
+    feature/*:
+      - step: *install-veracode-cli
+      - step: *autopackage
+      - step: *sca-scan
+ 
+  pull-requests:
+    '**':
+      - step: *install-veracode-cli
+      - step: *autopackage
+      - step: *sca-scan
