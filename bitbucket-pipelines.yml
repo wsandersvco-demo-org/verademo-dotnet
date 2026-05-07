@@ -1,4 +1,4 @@
-image: maven:3.9-eclipse-temurin-17
+image: veracode/scm-packaging:4.0.0
 
 definitions:
   steps:
