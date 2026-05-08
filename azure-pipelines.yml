@@ -124,14 +124,6 @@ stages:
           - checkout: self
             displayName: 'Checkout code'
 
-          - task: DownloadBuildArtifacts@0
-            displayName: 'Download packaged artifacts'
-            inputs:
-              buildType: 'current'
-              downloadType: 'single'
-              artifactName: 'packaged-artifacts'
-              downloadPath: '$(Agent.BuildDirectory)/artifacts'
-
           - script: |
               mkdir -p "$(Build.ArtifactStagingDirectory)/veracode-results"
               curl -sSL https://download.sourceclear.com/ci.sh | sh -s -- scan . --recursive --allow-dirty --json "$(Build.ArtifactStagingDirectory)/veracode-results/sca-results.json"
@@ -147,41 +139,41 @@ stages:
               ArtifactName: 'sca-scan-results'
             condition: succeededOrFailed()
 
-  - stage: PolicyUpload
-    displayName: 'Policy Upload & Scan'
-    dependsOn: Scan
-    condition: eq(variables['Build.SourceBranch'], 'refs/heads/main')
-    jobs:
-      - job: DoPolicy
-        displayName: 'Upload & Policy Scan'
-        steps:
-          - checkout: self
-            displayName: 'Checkout code'
+  # - stage: PolicyUpload
+  #   displayName: 'Policy Upload & Scan'
+  #   dependsOn: Scan
+  #   condition: eq(variables['Build.SourceBranch'], 'refs/heads/main')
+  #   jobs:
+  #     - job: DoPolicy
+  #       displayName: 'Upload & Policy Scan'
+  #       steps:
+  #         - checkout: self
+  #           displayName: 'Checkout code'
 
-          - task: DownloadBuildArtifacts@0
-            displayName: 'Download packaged artifacts'
-            inputs:
-              buildType: 'current'
-              downloadType: 'single'
-              artifactName: 'packaged-artifacts'
-              downloadPath: '$(Agent.BuildDirectory)/artifacts'
+  #         - task: DownloadBuildArtifacts@0
+  #           displayName: 'Download packaged artifacts'
+  #           inputs:
+  #             buildType: 'current'
+  #             downloadType: 'single'
+  #             artifactName: 'packaged-artifacts'
+  #             downloadPath: '$(Agent.BuildDirectory)/artifacts'
 
-          - task: Veracode@3
-            displayName: 'Upload and run policy scan'
-            inputs:
-              ConnectionDetailsSelection: 'Credentials'
-              apiId: $(VERACODE_API_ID)
-              apiKey: $(VERACODE_API_KEY)
-              veracodeAppProfile: 'VeraDemo.NET'
-              version: 'Build-$(Build.BuildNumber)'
-              filepath: '$(Agent.BuildDirectory)/artifacts'
-              createProfile: true
-              failBuildIfPolicyFails: true
+  #         - task: Veracode@3
+  #           displayName: 'Upload and run policy scan'
+  #           inputs:
+  #             ConnectionDetailsSelection: 'Credentials'
+  #             apiId: $(VERACODE_API_ID)
+  #             apiKey: $(VERACODE_API_KEY)
+  #             veracodeAppProfile: 'VeraDemo.NET'
+  #             version: 'Build-$(Build.BuildNumber)'
+  #             filepath: '$(Agent.BuildDirectory)/artifacts'
+  #             createProfile: true
+  #             failBuildIfPolicyFails: true
 
-          - task: PublishBuildArtifacts@1
-            displayName: 'Publish policy scan results'
-            inputs:
-              PathtoPublish: '$(Build.ArtifactStagingDirectory)/veracode-results'
-              ArtifactName: 'policy-scan-results'
-            condition: succeededOrFailed()
+  #         - task: PublishBuildArtifacts@1
+  #           displayName: 'Publish policy scan results'
+  #           inputs:
+  #             PathtoPublish: '$(Build.ArtifactStagingDirectory)/veracode-results'
+  #             ArtifactName: 'policy-scan-results'
+  #           condition: succeededOrFailed()
 
