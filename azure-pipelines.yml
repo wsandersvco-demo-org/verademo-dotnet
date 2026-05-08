@@ -7,7 +7,10 @@ pool:
   vmImage: 'ubuntu-latest'
 
 variables:
-  VERACODE_POLICY_NAME: 'Veracode Recommended Very High'
+  - group: SRCCLR_SCA_AGENT
+  - group: VERACODE_API_CREDENTIALS
+  - name: VERACODE_POLICY_NAME
+    value: 'Veracode Recommended Very High'
 
 stages:
   - stage: Build
@@ -75,7 +78,6 @@ stages:
 
           - script: |
               mkdir -p $(Build.ArtifactStagingDirectory)/veracode-results
-              cd $(Build.ArtifactStagingDirectory)/veracode-results
               ./veracode policy get $(VERACODE_POLICY_NAME) --format json
             displayName: 'Fetch policy configuration'
             env:
@@ -83,7 +85,6 @@ stages:
               VERACODE_API_KEY_SECRET: $(VERACODE_API_KEY)
 
           - script: |
-              cd $(Build.ArtifactStagingDirectory)/veracode-results
               ARTIFACT_FILE=$(find $(Agent.BuildDirectory)/artifacts -name "*.zip" | head -1)
               if [ -z "$ARTIFACT_FILE" ]; then
                 echo "##vso[task.logissue type=error]No artifact file found"
