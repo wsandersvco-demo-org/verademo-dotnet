@@ -153,5 +153,34 @@ stages:
     jobs:
       - job: DoPolicy
         displayName: 'Upload & Policy Scan'
-        steps: []
+        steps:
+          - checkout: self
+            displayName: 'Checkout code'
+
+          - task: DownloadBuildArtifacts@0
+            displayName: 'Download packaged artifacts'
+            inputs:
+              buildType: 'current'
+              downloadType: 'single'
+              artifactName: 'packaged-artifacts'
+              downloadPath: '$(Agent.BuildDirectory)/artifacts'
+
+          - task: Veracode@3
+            displayName: 'Upload and run policy scan'
+            inputs:
+              ConnectionDetailsSelection: 'Credentials'
+              apiId: $(VERACODE_API_ID)
+              apiKey: $(VERACODE_API_KEY)
+              veracodeAppProfile: 'VeraDemo.NET'
+              version: 'Build-$(Build.BuildNumber)'
+              filepath: '$(Agent.BuildDirectory)/artifacts'
+              createProfile: true
+              failBuildIfPolicyFails: true
+
+          - task: PublishBuildArtifacts@1
+            displayName: 'Publish policy scan results'
+            inputs:
+              PathtoPublish: '$(Build.ArtifactStagingDirectory)/veracode-results'
+              ArtifactName: 'policy-scan-results'
+            condition: succeededOrFailed()
 
