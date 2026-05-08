@@ -58,9 +58,6 @@ stages:
       - job: StaticScan
         displayName: 'Veracode Static Scan'
         steps:
-          - checkout: self
-            displayName: 'Checkout code'
-
           - task: DownloadBuildArtifacts@0
             displayName: 'Download packaged artifacts'
             inputs:
@@ -184,41 +181,35 @@ stages:
               ArtifactName: 'sca-scan-results'
             condition: succeededOrFailed()
 
-  # - stage: PolicyUpload
-  #   displayName: 'Policy Upload & Scan'
-  #   dependsOn: Scan
-  #   condition: eq(variables['Build.SourceBranch'], 'refs/heads/main')
-  #   jobs:
-  #     - job: DoPolicy
-  #       displayName: 'Upload & Policy Scan'
-  #       steps:
-  #         - checkout: self
-  #           displayName: 'Checkout code'
+  - stage: PolicyUpload
+    displayName: 'Policy Upload & Scan'
+    dependsOn: Scan
+    condition: eq(variables['Build.SourceBranch'], 'refs/heads/main')
+    jobs:
+      - job: DoPolicy
+        displayName: 'Upload & Policy Scan'
+        steps:
+          - task: DownloadBuildArtifacts@0
+            displayName: 'Download packaged artifacts'
+            inputs:
+              buildType: 'current'
+              downloadType: 'single'
+              artifactName: 'packaged-artifacts'
+              downloadPath: '$(Agent.BuildDirectory)/artifacts'
 
-  #         - task: DownloadBuildArtifacts@0
-  #           displayName: 'Download packaged artifacts'
-  #           inputs:
-  #             buildType: 'current'
-  #             downloadType: 'single'
-  #             artifactName: 'packaged-artifacts'
-  #             downloadPath: '$(Agent.BuildDirectory)/artifacts'
-
-  #         - task: Veracode@3
-  #           displayName: 'Upload and run policy scan'
-  #           inputs:
-  #             ConnectionDetailsSelection: 'Credentials'
-  #             apiId: $(VERACODE_API_ID)
-  #             apiKey: $(VERACODE_API_KEY)
-  #             veracodeAppProfile: 'VeraDemo.NET'
-  #             version: 'Build-$(Build.BuildNumber)'
-  #             filepath: '$(Agent.BuildDirectory)/artifacts'
-  #             createProfile: true
-  #             failBuildIfPolicyFails: true
-
-  #         - task: PublishBuildArtifacts@1
-  #           displayName: 'Publish policy scan results'
-  #           inputs:
-  #             PathtoPublish: '$(Build.ArtifactStagingDirectory)/veracode-results'
-  #             ArtifactName: 'policy-scan-results'
-  #           condition: succeededOrFailed()
-
+          - task: Veracode@3
+            displayName: 'Upload and run policy scan'
+            inputs:
+              ConnectionDetailsSelection: 'Credentials'
+              apiId: $(VERACODE_API_ID)
+              apiKey: $(VERACODE_API_KEY)
+              veracodeAppProfile: '$(System.TeamProject)/$(Build.Repository.Name)'
+              version: 'Build-$(Build.BuildNumber)'
+              optargs: '-deleteincompletescan 1'
+              filepath: '$(Agent.BuildDirectory)/artifacts/packaged-artifacts'
+              importResults: true
+              createProfile: true
+              failBuildIfUploadAndScanBuildStepFails: true
+              importResults: true
+              failBuildOnPolicyFail: true
+              maximumWaitTime: '120'
