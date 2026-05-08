@@ -207,7 +207,6 @@ stages:
               version: 'Build-$(Build.BuildNumber)'
               optargs: '-deleteincompletescan 1'
               filepath: '$(Agent.BuildDirectory)/artifacts/packaged-artifacts'
-              importResults: true
               createProfile: true
               failBuildIfUploadAndScanBuildStepFails: true
               importResults: true
