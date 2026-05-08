@@ -77,22 +77,22 @@ stages:
               VERACODE_API_KEY_SECRET: $(VERACODE_API_KEY)
 
           - script: |
-              mkdir -p $(Build.ArtifactStagingDirectory)/veracode-results
-              ./veracode policy get $(VERACODE_POLICY_NAME) --format json
+              mkdir -p "$(Build.ArtifactStagingDirectory)/veracode-results"
+              ./veracode policy get "$(VERACODE_POLICY_NAME)" --format json
             displayName: 'Fetch policy configuration'
             env:
               VERACODE_API_KEY_ID: $(VERACODE_API_ID)
               VERACODE_API_KEY_SECRET: $(VERACODE_API_KEY)
 
           - script: |
-              ARTIFACT_FILE=$(find $(Agent.BuildDirectory)/artifacts -name "*.zip" | head -1)
+              ARTIFACT_FILE=$(find "$(Agent.BuildDirectory)/artifacts" -name "*.zip" | head -1)
               if [ -z "$ARTIFACT_FILE" ]; then
                 echo "##vso[task.logissue type=error]No artifact file found"
                 exit 1
               fi
               echo "Scanning artifact: $ARTIFACT_FILE"
               ./veracode static scan \
-                --policy-file $(VERACODE_POLICY_NAME).json \
+                --policy-file "$(VERACODE_POLICY_NAME).json" \
                 --results-file static-results.json \
                 --filtered-json-output-file static-filtered-results.json \
                 "$ARTIFACT_FILE"
@@ -133,8 +133,8 @@ stages:
               downloadPath: '$(Agent.BuildDirectory)/artifacts'
 
           - script: |
-              mkdir -p $(Build.ArtifactStagingDirectory)/veracode-results
-              curl -sSL https://download.sourceclear.com/ci.sh | sh -s -- scan . --recursive --allow-dirty --json $(Build.ArtifactStagingDirectory)/veracode-results/sca-results.json
+              mkdir -p "$(Build.ArtifactStagingDirectory)/veracode-results"
+              curl -sSL https://download.sourceclear.com/ci.sh | sh -s -- scan . --recursive --allow-dirty --json "$(Build.ArtifactStagingDirectory)/veracode-results/sca-results.json"
             displayName: 'Run SCA agent scan'
             env:
               SRCCLR_API_TOKEN: $(SRCCLR_API_TOKEN)
