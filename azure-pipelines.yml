@@ -87,6 +87,7 @@ stages:
           - script: |
               set -e
               ARTIFACTS_DIR="$(Agent.BuildDirectory)/artifacts"
+              ls -lR "$ARTIFACTS_DIR"
               RESULTS_DIR="$(Build.ArtifactStagingDirectory)/veracode-results"
               ZIP_FILES=($(find "$ARTIFACTS_DIR" -maxdepth 1 -name "*.zip" -type f | sort))
 
