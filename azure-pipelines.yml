@@ -1,86 +1,179 @@
-#
-# This is an example of using the VeraDemo DotNetCore test application with the Veracode scanners.  
-#
-
-# A Veracode subscription is required.
 trigger:
-- none
+  - main
+  - develop
+  - feature/*
 
 pool:
   vmImage: 'ubuntu-latest'
 
+variables:
+  - group: SRCCLR_SCA_AGENT
+  - group: VERACODE_API_CREDENTIALS
+  - name: VERACODE_POLICY_NAME
+    value: 'Veracode Recommended Very High'
+
 stages:
   - stage: Build
+    displayName: 'Build & Package'
     jobs:
-    - job: doBuild
-      steps:
-      - task: UseDotNet@2
-        inputs:
-          version: '3.1.x'
-      # debugging info:
-      # - script: |
-      #     echo srcDir: $(Build.SourcesDirectory)
-      #     echo artDir: $(Build.ArtifactStagingDirectory)
-      - task: DotNetCoreCLI@2
-        inputs:
-          command: 'publish'
-          arguments: '-c Debug -p:UseAppHost=false'
-          workingDirectory: '$(Build.SourcesDirectory)/app'
-      - task: ArchiveFiles@2
-        inputs:
-          rootFolderOrFile: '$(Build.SourcesDirectory)/app/bin/Debug/netcoreapp3.1'
-          includeRootFolder: false
-          archiveType: 'zip'
-          archiveFile: '$(Build.ArtifactStagingDirectory)/upload.zip'
-          replaceExistingArchive: true
-          verbose: true
-      - task: PublishBuildArtifacts@1
-        inputs:
-          PathtoPublish: '$(Build.ArtifactStagingDirectory)/upload.zip'
-          ArtifactName: 'upload'
+      - job: DoBuild
+        displayName: 'Build with Auto-Packager'
+        steps:
+          - checkout: self
+            displayName: 'Checkout code'
 
-  - stage: PolicyScan
+          - task: UseDotNet@2
+            displayName: 'Setup .NET 8'
+            inputs:
+              version: '8.0.x'
+
+          - script: |
+              curl -fsS https://tools.veracode.com/veracode-cli/install | sh
+            displayName: 'Install Veracode CLI'
+            env:
+              VERACODE_API_KEY_ID: $(VERACODE_API_ID)
+              VERACODE_API_KEY_SECRET: $(VERACODE_API_KEY)
+
+          - script: |
+              ./veracode package \
+                --source . \
+                --output veracode-artifacts \
+                --trust
+            displayName: 'Package artifacts with auto-packager'
+            env:
+              VERACODE_API_KEY_ID: $(VERACODE_API_ID)
+              VERACODE_API_KEY_SECRET: $(VERACODE_API_KEY)
+
+          - task: PublishBuildArtifacts@1
+            displayName: 'Publish packaged artifacts'
+            inputs:
+              PathtoPublish: './veracode-artifacts'
+              ArtifactName: 'packaged-artifacts'
+            condition: succeeded()
+
+  - stage: Scan
+    displayName: 'Security Scans'
+    dependsOn: Build
     jobs:
-    - job: doStaticScan
-      steps:
-      #debugging step
-      # - script: |
-      #     echo buildNumber: $(build.buildNumber)
-      #     echo binDir: $(build.binariesDirectory)
-      #     echo artDir: $(build.artifactstagingdirectory)
-      #     echo srcDir: $(build.sourcesDirectory)
-      - task: DownloadBuildArtifacts@1
-        inputs:
-          artifactName: upload
-      - task: Veracode@3
-        inputs:
-          ConnectionDetailsSelection: 'Credentials'
-          apiId: $(VERACODE_API_ID)
-          apiKey: $(VERACODE_API_KEY)
-          veracodeAppProfile: 'Verademo.NET'
-          version: 'Azure-$(build.buildNumber)'
-          filepath: '$(build.artifactstagingdirectory)/upload/upload.zip'
+      - job: StaticScan
+        displayName: 'Veracode Static Scan'
+        steps:
+          - checkout: self
+            displayName: 'Checkout code'
 
-# the above steps are the bare minimum.
-# below are some additional steps that are commonplace
-  - stage: SCAScan
-    jobs:
-    - job: doSCAScan
-      steps:
-      - script: |
-          curl -sSL https://download.sourceclear.com/ci.sh | sh -s -- scan app
-        env: 
-          SRCCLR_API_TOKEN: $(SRCCLR_TOKEN)
+          - task: DownloadBuildArtifacts@0
+            displayName: 'Download packaged artifacts'
+            inputs:
+              buildType: 'current'
+              downloadType: 'single'
+              artifactName: 'packaged-artifacts'
+              downloadPath: '$(Agent.BuildDirectory)/artifacts'
 
-  - stage: ContainerScan
-    jobs:
-    - job: doContainerScan
-      steps:
-      - script: |
-          curl -fsS https://tools.veracode.com/veracode-cli/install | sh
-          ./veracode scan --type directory --source . --format table
-        env:
-          VERACODE_API_KEY_ID: $(VERACODE_API_ID)
-          VERACODE_API_KEY_SECRET: $(VERACODE_API_KEY)
+          - script: |
+              curl -fsS https://tools.veracode.com/veracode-cli/install | sh
+            displayName: 'Install Veracode CLI'
+            env:
+              VERACODE_API_KEY_ID: $(VERACODE_API_ID)
+              VERACODE_API_KEY_SECRET: $(VERACODE_API_KEY)
 
+          - script: |
+              mkdir -p "$(Build.ArtifactStagingDirectory)/veracode-results"
+              ./veracode policy get "$(VERACODE_POLICY_NAME)" --format json
+            displayName: 'Fetch policy configuration'
+            env:
+              VERACODE_API_KEY_ID: $(VERACODE_API_ID)
+              VERACODE_API_KEY_SECRET: $(VERACODE_API_KEY)
+
+          - script: |
+              ARTIFACT_FILE=$(find "$(Agent.BuildDirectory)/artifacts" -name "*.zip" | head -1)
+              if [ -z "$ARTIFACT_FILE" ]; then
+                echo "##vso[task.logissue type=error]No artifact file found"
+                exit 1
+              fi
+              echo "Scanning artifact: $ARTIFACT_FILE"
+              ./veracode static scan \
+                --policy-file "$(VERACODE_POLICY_NAME).json" \
+                --results-file static-results.json \
+                --filtered-json-output-file static-filtered-results.json \
+                "$ARTIFACT_FILE"
+              SCAN_EXIT_CODE=$?
+              if [ $SCAN_EXIT_CODE -eq 3 ]; then
+                echo "##vso[task.logissue type=error]Build gated: Policy violations found (exit code 3)"
+                exit 1
+              elif [ $SCAN_EXIT_CODE -gt 3 ]; then
+                echo "##vso[task.logissue type=error]Scan failed with exit code $SCAN_EXIT_CODE"
+                exit $SCAN_EXIT_CODE
+              else
+                echo "Scan completed successfully (exit code $SCAN_EXIT_CODE)"
+              fi
+            displayName: 'Run Veracode static scan and gate on exit code'
+            env:
+              VERACODE_API_KEY_ID: $(VERACODE_API_ID)
+              VERACODE_API_KEY_SECRET: $(VERACODE_API_KEY)
+            continueOnError: false
+
+          - task: PublishBuildArtifacts@1
+            displayName: 'Publish static scan results'
+            inputs:
+              PathtoPublish: '$(Build.ArtifactStagingDirectory)/veracode-results'
+              ArtifactName: 'static-scan-results'
+            condition: succeededOrFailed()
+      - job: SCAScan
+        displayName: 'SCA Agent Scan'
+        steps:
+          - checkout: self
+            displayName: 'Checkout code'
+
+          - script: |
+              mkdir -p "$(Build.ArtifactStagingDirectory)/veracode-results"
+              curl -sSL https://download.sourceclear.com/ci.sh | sh -s -- scan . --recursive --allow-dirty --json "$(Build.ArtifactStagingDirectory)/veracode-results/sca-results.json"
+            displayName: 'Run SCA agent scan'
+            env:
+              SRCCLR_API_TOKEN: $(SRCCLR_API_TOKEN)
+            continueOnError: true
+
+          - task: PublishBuildArtifacts@1
+            displayName: 'Publish SCA scan results'
+            inputs:
+              PathtoPublish: '$(Build.ArtifactStagingDirectory)/veracode-results'
+              ArtifactName: 'sca-scan-results'
+            condition: succeededOrFailed()
+
+  # - stage: PolicyUpload
+  #   displayName: 'Policy Upload & Scan'
+  #   dependsOn: Scan
+  #   condition: eq(variables['Build.SourceBranch'], 'refs/heads/main')
+  #   jobs:
+  #     - job: DoPolicy
+  #       displayName: 'Upload & Policy Scan'
+  #       steps:
+  #         - checkout: self
+  #           displayName: 'Checkout code'
+
+  #         - task: DownloadBuildArtifacts@0
+  #           displayName: 'Download packaged artifacts'
+  #           inputs:
+  #             buildType: 'current'
+  #             downloadType: 'single'
+  #             artifactName: 'packaged-artifacts'
+  #             downloadPath: '$(Agent.BuildDirectory)/artifacts'
+
+  #         - task: Veracode@3
+  #           displayName: 'Upload and run policy scan'
+  #           inputs:
+  #             ConnectionDetailsSelection: 'Credentials'
+  #             apiId: $(VERACODE_API_ID)
+  #             apiKey: $(VERACODE_API_KEY)
+  #             veracodeAppProfile: 'VeraDemo.NET'
+  #             version: 'Build-$(Build.BuildNumber)'
+  #             filepath: '$(Agent.BuildDirectory)/artifacts'
+  #             createProfile: true
+  #             failBuildIfPolicyFails: true
+
+  #         - task: PublishBuildArtifacts@1
+  #           displayName: 'Publish policy scan results'
+  #           inputs:
+  #             PathtoPublish: '$(Build.ArtifactStagingDirectory)/veracode-results'
+  #             ArtifactName: 'policy-scan-results'
+  #           condition: succeededOrFailed()
 
