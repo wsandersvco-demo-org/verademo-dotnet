@@ -93,8 +93,8 @@ stages:
               echo "Scanning artifact: $ARTIFACT_FILE"
               ./veracode static scan \
                 --policy-file "$(VERACODE_POLICY_NAME).json" \
-                --results-file static-results.json \
-                --filtered-json-output-file static-filtered-results.json \
+                --results-file "$(Build.ArtifactStagingDirectory)/veracode-results/static-results.json" \
+                --filtered-json-output-file "$(Build.ArtifactStagingDirectory)/veracode-results/static-filtered-results.json" \
                 "$ARTIFACT_FILE"
               SCAN_EXIT_CODE=$?
               if [ $SCAN_EXIT_CODE -eq 3 ]; then
