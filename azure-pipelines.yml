@@ -58,9 +58,6 @@ stages:
       - job: StaticScan
         displayName: 'Veracode Static Scan'
         steps:
-          - checkout: self
-            displayName: 'Checkout code'
-
           - task: DownloadBuildArtifacts@0
             displayName: 'Download packaged artifacts'
             inputs:
@@ -85,28 +82,73 @@ stages:
               VERACODE_API_KEY_SECRET: $(VERACODE_API_KEY)
 
           - script: |
-              ARTIFACT_FILE=$(find "$(Agent.BuildDirectory)/artifacts" -name "*.zip" | head -1)
-              if [ -z "$ARTIFACT_FILE" ]; then
-                echo "##vso[task.logissue type=error]No artifact file found"
+              set -e
+              ARTIFACTS_DIR="$(Agent.BuildDirectory)/artifacts/packaged-artifacts"
+              # ls -lR "$ARTIFACTS_DIR"
+              RESULTS_DIR="$(Build.ArtifactStagingDirectory)/veracode-results"
+              ZIP_FILES=($(find "$ARTIFACTS_DIR" -maxdepth 1 -name "*.zip" -type f | sort))
+
+              if [ ${#ZIP_FILES[@]} -eq 0 ]; then
+                echo "##vso[task.logissue type=error]No artifact files found"
                 exit 1
               fi
-              echo "Scanning artifact: $ARTIFACT_FILE"
-              ./veracode static scan \
-                --policy-file "$(VERACODE_POLICY_NAME).json" \
-                --results-file static-results.json \
-                --filtered-json-output-file static-filtered-results.json \
-                "$ARTIFACT_FILE"
-              SCAN_EXIT_CODE=$?
-              if [ $SCAN_EXIT_CODE -eq 3 ]; then
-                echo "##vso[task.logissue type=error]Build gated: Policy violations found (exit code 3)"
+
+              echo "Found ${#ZIP_FILES[@]} artifact(s) to scan"
+
+              # Run scans in parallel using subshells and wait for all
+              declare -a PIDS
+              declare -a FAILURES
+
+              for ARTIFACT_FILE in "${ZIP_FILES[@]}"; do
+                FILENAME=$(basename "$ARTIFACT_FILE" .zip)
+                (
+                  echo "Starting scan for: $ARTIFACT_FILE"
+                  ./veracode static scan \
+                    --policy-file "$(VERACODE_POLICY_NAME).json" \
+                    --results-file "$RESULTS_DIR/${FILENAME}-results.json" \
+                    --filtered-json-output-file "$RESULTS_DIR/${FILENAME}-filtered-results.json" \
+                    "$ARTIFACT_FILE"
+                  SCAN_EXIT=$?
+                  if [ $SCAN_EXIT -eq 3 ]; then
+                    echo "Policy violations found for $FILENAME (exit code 3)"
+                    exit 3
+                  elif [ $SCAN_EXIT -gt 3 ]; then
+                    echo "Scan failed for $FILENAME with exit code $SCAN_EXIT"
+                    exit $SCAN_EXIT
+                  else
+                    echo "Scan completed successfully for $FILENAME (exit code $SCAN_EXIT)"
+                    exit 0
+                  fi
+                ) &
+                PIDS+=($!)
+              done
+
+              # Wait for all background jobs and collect exit codes
+              ANY_POLICY_VIOLATIONS=0
+              ANY_FAILURES=0
+              for i in "${!PIDS[@]}"; do
+                wait ${PIDS[$i]}
+                EXIT_CODE=$?
+                FILENAME=$(basename "${ZIP_FILES[$i]}" .zip)
+                if [ $EXIT_CODE -eq 0 ]; then
+                  echo "Scan completed successfully for $FILENAME"
+                elif [ $EXIT_CODE -eq 1 ]; then
+                  echo "##vso[task.logissue type=warning]$FILENAME: No modules found in artifact (exit code 1)"
+                elif [ $EXIT_CODE -eq 3 ]; then
+                  echo "##vso[task.logissue type=warning]$FILENAME: Policy violations found"
+                  ANY_POLICY_VIOLATIONS=1
+                elif [ $EXIT_CODE -gt 3 ]; then
+                  echo "##vso[task.logissue type=error]$FILENAME: Scan failed with exit code $EXIT_CODE"
+                  ANY_FAILURES=1
+                fi
+              done
+
+              if [ $ANY_FAILURES -eq 1 ]; then
                 exit 1
-              elif [ $SCAN_EXIT_CODE -gt 3 ]; then
-                echo "##vso[task.logissue type=error]Scan failed with exit code $SCAN_EXIT_CODE"
-                exit $SCAN_EXIT_CODE
-              else
-                echo "Scan completed successfully (exit code $SCAN_EXIT_CODE)"
+              elif [ $ANY_POLICY_VIOLATIONS -eq 1 ]; then
+                exit 3
               fi
-            displayName: 'Run Veracode static scan and gate on exit code'
+            displayName: 'Run parallel Veracode static scans'
             env:
               VERACODE_API_KEY_ID: $(VERACODE_API_ID)
               VERACODE_API_KEY_SECRET: $(VERACODE_API_KEY)
@@ -139,41 +181,34 @@ stages:
               ArtifactName: 'sca-scan-results'
             condition: succeededOrFailed()
 
-  # - stage: PolicyUpload
-  #   displayName: 'Policy Upload & Scan'
-  #   dependsOn: Scan
-  #   condition: eq(variables['Build.SourceBranch'], 'refs/heads/main')
-  #   jobs:
-  #     - job: DoPolicy
-  #       displayName: 'Upload & Policy Scan'
-  #       steps:
-  #         - checkout: self
-  #           displayName: 'Checkout code'
+  - stage: PolicyUpload
+    displayName: 'Policy Upload & Scan'
+    dependsOn: Scan
+    condition: eq(variables['Build.SourceBranch'], 'refs/heads/main')
+    jobs:
+      - job: DoPolicy
+        displayName: 'Upload & Policy Scan'
+        steps:
+          - task: DownloadBuildArtifacts@0
+            displayName: 'Download packaged artifacts'
+            inputs:
+              buildType: 'current'
+              downloadType: 'single'
+              artifactName: 'packaged-artifacts'
+              downloadPath: '$(Agent.BuildDirectory)/artifacts'
 
-  #         - task: DownloadBuildArtifacts@0
-  #           displayName: 'Download packaged artifacts'
-  #           inputs:
-  #             buildType: 'current'
-  #             downloadType: 'single'
-  #             artifactName: 'packaged-artifacts'
-  #             downloadPath: '$(Agent.BuildDirectory)/artifacts'
-
-  #         - task: Veracode@3
-  #           displayName: 'Upload and run policy scan'
-  #           inputs:
-  #             ConnectionDetailsSelection: 'Credentials'
-  #             apiId: $(VERACODE_API_ID)
-  #             apiKey: $(VERACODE_API_KEY)
-  #             veracodeAppProfile: 'VeraDemo.NET'
-  #             version: 'Build-$(Build.BuildNumber)'
-  #             filepath: '$(Agent.BuildDirectory)/artifacts'
-  #             createProfile: true
-  #             failBuildIfPolicyFails: true
-
-  #         - task: PublishBuildArtifacts@1
-  #           displayName: 'Publish policy scan results'
-  #           inputs:
-  #             PathtoPublish: '$(Build.ArtifactStagingDirectory)/veracode-results'
-  #             ArtifactName: 'policy-scan-results'
-  #           condition: succeededOrFailed()
-
+          - task: Veracode@3
+            displayName: 'Upload and run policy scan'
+            inputs:
+              ConnectionDetailsSelection: 'Credentials'
+              apiId: $(VERACODE_API_ID)
+              apiKey: $(VERACODE_API_KEY)
+              veracodeAppProfile: '$(System.TeamProject)/$(Build.Repository.Name)'
+              version: 'Build-$(Build.BuildNumber)'
+              optargs: '-deleteincompletescan 1'
+              filepath: '$(Agent.BuildDirectory)/artifacts/packaged-artifacts'
+              createProfile: true
+              failBuildIfUploadAndScanBuildStepFails: true
+              importResults: true
+              failBuildOnPolicyFail: true
+              maximumWaitTime: '120'
