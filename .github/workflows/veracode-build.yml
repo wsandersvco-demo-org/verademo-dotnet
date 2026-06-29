@@ -2,7 +2,7 @@ name: Veracode Scan
 
 on:
   repository_dispatch:
-    types: [register-build]
+    types: [register-build-example-one]
 
 env:
   ARTIFACT_NAME: artifact-build
