@@ -8,5 +8,5 @@ veracode_static_scan:
   #     - '*'
   #   branches_to_exclude:
   # create_issue: true
-  use_custom_workflow: register-build-example-two
+  use_custom_workflow: register-build-example-one
   artifact_file: artifact-build
