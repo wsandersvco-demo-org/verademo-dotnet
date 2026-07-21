@@ -50,6 +50,7 @@ jobs:
   register:
     runs-on: ${{ fromJSON(github.event.client_payload.user_config.default_runs_on) }}
     name: register
+    needs: [ build ]
     steps:
     - name: Register build
       id: register-build
